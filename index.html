@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Internes Bus-Navi</title>
-    <!-- Nutzung der unblockierbaren Leaflet-Kartenbibliothek -->
+    <!-- Einbindung der unblockierbaren Leaflet-Kartenbibliothek -->
     <link rel="stylesheet" href="https://unpkg.com" />
     <script src="https://unpkg.com"></script>
     <style>
@@ -16,7 +16,7 @@
         button { background: #00e676; color: black; font-weight: bold; cursor: pointer; }
         #login-screen button { background: #007aff; color: white; width: auto; padding: 12px 40px; border-radius: 5px; border: none; font-size: 16px; font-weight: bold; }
         #login-screen input { width: 280px; text-align: center; background: #333; color: white; border: 1px solid #555; padding: 12px; border-radius: 5px; font-size: 16px; }
-        #map { position: absolute; top: 180px; bottom: 0; width: 100%; z-index: 1; }
+        #map { position: absolute; top: 180px; bottom: 0; width: 100%; z-index: 1; background: #333; }
         #visual-alert { display: none; background: red; color: white; text-align: center; padding: 10px; font-weight: bold; font-size: 18px; position: fixed; bottom: 10px; left: 10px; right: 10px; z-index: 999; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
@@ -63,18 +63,18 @@
     let map, fahrerPosition, zielKoordinaten, routenLinie, routeLayer, busMarker;
 
     function initMap() {
-        // Initialisierung der unblockierbaren Leaflet-Karte (Startpunkt voreingestellt auf Deutschland Zentrum)
+        // Initialisierung der freien OpenStreetMap-Karte (Standard-Mittelpunkt Bayern)
         map = L.map('map').setView([48.137, 11.576], 10);
 
-        // Laden der freien OpenStreetMap-Kartenbilder
+        // Auslieferung der unblockierbaren Straßenkacheln aktivieren
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // GPS aktivieren
+        // GPS-Verfolgung starten
         navigator.geolocation.watchPosition((pos) => {
-            fahrerPosition = [pos.coords.latitude, pos.coords.longitude]; // Format: [Lat, Lon]
+            fahrerPosition = [pos.coords.latitude, pos.coords.longitude];
             
             if (busMarker) {
                 busMarker.setLatLng(fahrerPosition);
@@ -84,8 +84,8 @@
             if(routenLinie) { pruefeRoutenAbweichung(fahrerPosition); }
         }, (err) => console.log("GPS wird gesucht..."), { enableHighAccuracy: true });
 
-        // Erzwingt die korrekte Anpassung an jede Displaygröße beim ersten Laden
-        setTimeout(() => { map.invalidateSize(); }, 500);
+        // Wichtig: Zwingt den Browser, die Kartengröße sofort an das Handydisplay anzupassen
+        setTimeout(() => { map.invalidateSize(); }, 400);
     }
 
     function sucheUndNavigiere() {
@@ -97,8 +97,7 @@
         .then(data => {
             if(!data || data.length === 0) return alert("Adresse nicht gefunden!");
             
-            // Abspeichern im Leaflet Format: [Lat, Lon]
-            zielKoordinaten = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+            zielKoordinaten = [parseFloat(data.lat), parseFloat(data.lon)];
             berechneBusRoute();
         }).catch(err => alert("Fehler bei der Adresssuche: " + err));
     }
@@ -109,10 +108,10 @@
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
         if(!zielKoordinaten) return alert("Bitte ein Ziel eingeben!");
 
-        // Startpunkt, falls drinnen kein GPS da ist (München/Ingolstadt Bereich)
+        // Startpunkt bei schwachem GPS-Signal drinnen (Notfall-Zentrum)
         const start = fahrerPosition ? fahrerPosition : [48.1371, 11.5762];
 
-        // OSRM-Server verlangt zwingend die Reihenfolge in der URL: Lon,Lat;Lon,Lat
+        // Datenübergabe an das offizielle Routing-System
         const url = `https://project-osrm.org{start[1]},${start[0]};${zielKoordinaten[1]},${zielKoordinaten[0]}?geometries=geojson`;
 
         fetch(url)
@@ -120,15 +119,16 @@
         .then(data => {
             if(!data.routes || data.routes.length === 0) return alert("Keine Route gefunden!");
             
-            // Konvertiert das empfangene OSRM-Format [Lon, Lat] zurück in das Leaflet-Format [Lat, Lon]
+            // Konvertierung der Server-Koordinaten in das richtige Kartenformat
             const coordsOSRM = data.routes[0].geometry.coordinates;
             routenLinie = coordsOSRM.map(coord => [coord[1], coord[0]]);
 
             if (routeLayer) { map.removeLayer(routeLayer); }
 
+            // Zeichnet die berechnete Strecke als grüne Linie auf dem Smartphone
             routeLayer = L.polyline(routenLinie, { color: '#00e676', weight: 6 }).addTo(map);
             
-            // Passt das Display an, sodass Start und Ziel komplett sichtbar sind
+            // Zoomt die Ansicht so, dass Start und Ziel perfekt sichtbar sind
             const bounds = L.latLngBounds([start, zielKoordinaten]);
             map.fitBounds(bounds, { padding: [30, 30] });
         }).catch(err => alert("Fehler beim Routenserver: " + err));
