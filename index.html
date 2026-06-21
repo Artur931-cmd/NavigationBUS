@@ -63,7 +63,7 @@
     let map, fahrerPosition, zielKoordinaten, routenLinie, routeLayer, busMarker;
 
     function initMap() {
-        // Initialisierung der unblockierbaren Leaflet-Karte (Startpunkt Region Ingolstadt/München)
+        // Initialisierung der unblockierbaren Leaflet-Karte (Startpunkt voreingestellt auf Deutschland Zentrum)
         map = L.map('map').setView([48.137, 11.576], 10);
 
         // Laden der freien OpenStreetMap-Kartenbilder
@@ -74,7 +74,7 @@
 
         // GPS aktivieren
         navigator.geolocation.watchPosition((pos) => {
-            fahrerPosition = [pos.coords.latitude, pos.coords.longitude]; // Leaflet nutzt [Lat, Lon]
+            fahrerPosition = [pos.coords.latitude, pos.coords.longitude]; // Format: [Lat, Lon]
             
             if (busMarker) {
                 busMarker.setLatLng(fahrerPosition);
@@ -82,9 +82,9 @@
                 busMarker = L.circleMarker(fahrerPosition, { radius: 10, color: '#007aff', fillColor: '#007aff', fillOpacity: 0.8 }).addTo(map);
             }
             if(routenLinie) { pruefeRoutenAbweichung(fahrerPosition); }
-        }, (err) => console.log("GPS am PC gesperrt."), { enableHighAccuracy: true });
+        }, (err) => console.log("GPS wird gesucht..."), { enableHighAccuracy: true });
 
-        // Karte nach kurzem Moment zwingen, sich korrekt an das Display anzupassen
+        // Erzwingt die korrekte Anpassung an jede Displaygröße beim ersten Laden
         setTimeout(() => { map.invalidateSize(); }, 500);
     }
 
@@ -92,14 +92,13 @@
         const adresse = document.getElementById('target-address').value;
         if(!adresse) return alert("Bitte Ziel eingeben!");
         
-        // Stabiler Suchserver der OpenStreetMap-Community
         fetch(`https://openstreetmap.org{encodeURIComponent(adresse)}&limit=1`)
         .then(res => res.json())
         .then(data => {
             if(!data || data.length === 0) return alert("Adresse nicht gefunden!");
             
-            // Koordinaten für Leaflet abspeichern
-            zielKoordinaten = [parseFloat(data.lat), parseFloat(data.lon)];
+            // Abspeichern im Leaflet Format: [Lat, Lon]
+            zielKoordinaten = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
             berechneBusRoute();
         }).catch(err => alert("Fehler bei der Adresssuche: " + err));
     }
@@ -110,10 +109,10 @@
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
         if(!zielKoordinaten) return alert("Bitte ein Ziel eingeben!");
 
-        // Startpunkt, falls drinnen kein GPS da ist
+        // Startpunkt, falls drinnen kein GPS da ist (München/Ingolstadt Bereich)
         const start = fahrerPosition ? fahrerPosition : [48.1371, 11.5762];
 
-        // OSRM benötigt für die URL das Format: Lon,Lat;Lon,Lat
+        // OSRM-Server verlangt zwingend die Reihenfolge in der URL: Lon,Lat;Lon,Lat
         const url = `https://project-osrm.org{start[1]},${start[0]};${zielKoordinaten[1]},${zielKoordinaten[0]}?geometries=geojson`;
 
         fetch(url)
@@ -121,19 +120,17 @@
         .then(data => {
             if(!data.routes || data.routes.length === 0) return alert("Keine Route gefunden!");
             
-            // OSRM liefert [Lon, Lat] -> Leaflet braucht für Linien aber [Lat, Lon]
+            // Konvertiert das empfangene OSRM-Format [Lon, Lat] zurück in das Leaflet-Format [Lat, Lon]
             const coordsOSRM = data.routes[0].geometry.coordinates;
             routenLinie = coordsOSRM.map(coord => [coord[1], coord[0]]);
 
-            // Alte Route löschen, falls vorhanden
             if (routeLayer) { map.removeLayer(routeLayer); }
 
-            // Neue Route als grüne Linie zeichnen
             routeLayer = L.polyline(routenLinie, { color: '#00e676', weight: 6 }).addTo(map);
             
-            // Karte perfekt auf die Route zoomen
+            // Passt das Display an, sodass Start und Ziel komplett sichtbar sind
             const bounds = L.latLngBounds([start, zielKoordinaten]);
-            map.fitBounds(bounds, { padding: [50, 50] });
+            map.fitBounds(bounds, { padding: [30, 30] });
         }).catch(err => alert("Fehler beim Routenserver: " + err));
     }
 
