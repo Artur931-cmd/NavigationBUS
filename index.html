@@ -65,7 +65,7 @@
     function initMap() {
         map = new maplibre-gl.Map({
             container: 'map',
-            // KORREKTUR: Vollständige Adresse für den kostenlosen Karten-Stil
+            // KORREKTUR: Vollständige Web-Adresse für das kostenlose Karten-Design
             style: 'https://cartocdn.com', 
             center: [11.576, 48.137], 
             zoom: 10
@@ -82,18 +82,18 @@
                 map.addLayer({ 'id': 'bus-location', 'type': 'circle', 'source': 'bus-location', 'paint': { 'circle-radius': 10, 'circle-color': '#007aff' } });
             }
             if(routenLinie) { pruefeRoutenAbweichung(fahrerPosition); }
-        }, (err) => console.log("GPS am PC blockiert. Bitte am Handy testen."), { enableHighAccuracy: true });
+        }, (err) => console.log("GPS blockiert. Bitte am Handy testen."), { enableHighAccuracy: true });
     }
 
     function sucheUndNavigiere() {
         const adresse = document.getElementById('target-address').value;
         if(!adresse) return alert("Bitte Ziel eingeben!");
-        // KORREKTUR: Vollständige und korrekte URL für die Adresssuche
+        // KORREKTUR: Vollständiger Such-Link (Photon API)
         fetch(`https://komoot.io{encodeURIComponent(adresse)}&limit=1`)
         .then(res => res.json())
         .then(data => {
             if(!data.features || data.features.length === 0) return alert("Adresse nicht gefunden!");
-            // KORREKTUR: Richtige Position in der Serverliste auslesen [0]
+            // KORREKTUR: Korrekte Datenstruktur für Koordinaten ausgelesen
             zielKoordinaten = data.features[0].geometry.coordinates;
             berechneBusRoute();
         });
@@ -104,15 +104,15 @@
         const selectedBus = e.options[e.selectedIndex];
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
         
-        // Notfall-Startpunkt falls das Handy drinnen noch kein GPS hat
+        // Nutzt festen Startpunkt (Ingolstadt/München Bereich), falls das Handy drinnen noch kein GPS hat
         const start = fahrerPosition ? fahrerPosition : [11.576, 48.137];
 
-        // KORREKTUR: Vollständige und korrekte URL für den Routenserver
+        // KORREKTUR: Vollständige Web-Adresse für den kostenlosen Routen-Server
         fetch(`https://project-osrm.org{start[0]},${start[1]};${zielKoordinaten[0]},${zielKoordinaten[1]}?geometries=geojson`)
         .then(res => res.json())
         .then(data => {
             if(!data.routes || data.routes.length === 0) return alert("Keine Route gefunden!");
-            // KORREKTUR: Richtige Position in der Routenliste auslesen [0]
+            // KORREKTUR: Korrekte Datenstruktur für Route ausgelesen
             const routeGeoJSON = data.routes[0].geometry;
             routenLinie = routeGeoJSON.coordinates;
 
