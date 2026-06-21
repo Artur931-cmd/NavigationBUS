@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Internes Bus-Navi</title>
-    <!-- KORREKTUR: Vollständige Pfade für die OpenStreetMap-Bibliothek -->
     <script src="https://unpkg.com"></script>
     <link href="https://unpkg.com" rel="stylesheet" />
     <style>
@@ -22,7 +21,7 @@
 </head>
 <body>
 
-<!-- Passwort-Abfrage beim Start -->
+<!-- Passwort-Abfrage -->
 <div id="login-screen">
     <h2>🔒 Bus-Navi Login</h2>
     <p>Bitte Passwort für Fahrer eingeben:</p>
@@ -31,7 +30,7 @@
     <button onclick="checkPassword()">Anmelden</button>
 </div>
 
-<!-- Hauptinhalt (Erst nach Login sichtbar) -->
+<!-- Hauptinhalt -->
 <div id="main-content">
     <div id="control-panel">
         <select id="bus-select">
@@ -65,7 +64,6 @@
     function initMap() {
         map = new maplibre-gl.Map({
             container: 'map',
-            // KORREKTUR: Vollständige Web-Adresse für das kostenlose Karten-Design
             style: 'https://cartocdn.com', 
             center: [11.576, 48.137], 
             zoom: 10
@@ -75,6 +73,7 @@
 
         navigator.geolocation.watchPosition((pos) => {
             fahrerPosition = [pos.coords.longitude, pos.coords.latitude];
+            
             if (map.getLayer('bus-location')) {
                 map.getSource('bus-location').setData({ 'type': 'Feature', 'geometry': { 'type': 'Point', 'coordinates': fahrerPosition } });
             } else {
@@ -82,37 +81,40 @@
                 map.addLayer({ 'id': 'bus-location', 'type': 'circle', 'source': 'bus-location', 'paint': { 'circle-radius': 10, 'circle-color': '#007aff' } });
             }
             if(routenLinie) { pruefeRoutenAbweichung(fahrerPosition); }
-        }, (err) => console.log("GPS blockiert. Bitte am Handy testen."), { enableHighAccuracy: true });
+        }, (err) => {
+            console.log("GPS-Signal am PC/drinnen blockiert. Draußen am Handy läuft es.");
+        }, { enableHighAccuracy: true });
     }
 
     function sucheUndNavigiere() {
         const adresse = document.getElementById('target-address').value;
         if(!adresse) return alert("Bitte Ziel eingeben!");
-        // KORREKTUR: Vollständiger Such-Link (Photon API)
+        
         fetch(`https://komoot.io{encodeURIComponent(adresse)}&limit=1`)
         .then(res => res.json())
         .then(data => {
             if(!data.features || data.features.length === 0) return alert("Adresse nicht gefunden!");
-            // KORREKTUR: Korrekte Datenstruktur für Koordinaten ausgelesen
             zielKoordinaten = data.features[0].geometry.coordinates;
             berechneBusRoute();
-        });
+        }).catch(err => alert("Fehler bei der Adresssuche: " + err));
     }
 
     function berechneBusRoute() {
         const e = document.getElementById("bus-select");
         const selectedBus = e.options[e.selectedIndex];
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
-        
-        // Nutzt festen Startpunkt (Ingolstadt/München Bereich), falls das Handy drinnen noch kein GPS hat
-        const start = fahrerPosition ? fahrerPosition : [11.576, 48.137];
 
-        // KORREKTUR: Vollständige Web-Adresse für den kostenlosen Routen-Server
-        fetch(`https://project-osrm.org{start[0]},${start[1]};${zielKoordinaten[0]},${zielKoordinaten[1]}?geometries=geojson`)
+        // Fester Startpunkt (Bereich Ingolstadt/München), falls drinnen kein GPS da ist
+        const standardStartpunkt = [11.5762, 48.1371]; 
+        const start = fahrerPosition ? fahrerPosition : standardStartpunkt;
+
+        const url = `https://froschica.org{start[0]},${start[1]};${zielKoordinaten[0]},${zielKoordinaten[1]}?geometries=geojson`;
+
+        fetch(url)
         .then(res => res.json())
         .then(data => {
             if(!data.routes || data.routes.length === 0) return alert("Keine Route gefunden!");
-            // KORREKTUR: Korrekte Datenstruktur für Route ausgelesen
+            
             const routeGeoJSON = data.routes[0].geometry;
             routenLinie = routeGeoJSON.coordinates;
 
@@ -122,9 +124,10 @@
                 map.addSource('route', { 'type': 'geojson', 'data': routeGeoJSON });
                 map.addLayer({ 'id': 'route', 'type': 'line', 'source': 'route', 'layout': { 'line-join': 'round', 'line-cap': 'round' }, 'paint': { 'line-color': '#00e676', 'line-width': 6 } });
             }
+            
             const bounds = new maplibre-gl.LngLatBounds(start, zielKoordinaten);
             map.fitBounds(bounds, { padding: 50 });
-        });
+        }).catch(err => alert("Fehler beim Routenserver: " + err));
     }
 
     function pruefeRoutenAbweichung(pos) {
