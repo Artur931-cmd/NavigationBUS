@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Internes Bus-Navi</title>
-    <!-- MapLibre für unblockierbare, schlüssellose OpenStreetMap-Karten -->
+    <!-- Nutzung der unblockierbaren OpenStreetMap-Bibliotheken -->
     <script src="https://unpkg.com"></script>
     <link href="https://unpkg.com" rel="stylesheet" />
     <style>
@@ -22,7 +22,7 @@
 </head>
 <body>
 
-<!-- Passwort-Abfrage -->
+<!-- Passwort-Abfrage beim Start -->
 <div id="login-screen">
     <h2>🔒 Bus-Navi Login</h2>
     <p>Bitte Passwort für Fahrer eingeben:</p>
@@ -31,7 +31,7 @@
     <button onclick="checkPassword()">Anmelden</button>
 </div>
 
-<!-- Hauptinhalt -->
+<!-- Hauptinhalt (Erst nach Login sichtbar) -->
 <div id="main-content">
     <div id="control-panel">
         <select id="bus-select">
@@ -63,10 +63,28 @@
     let map, fahrerPosition, zielKoordinaten, routenLinie;
 
     function initMap() {
-        // Freier, unblockierbarer OpenStreetMap Karten-Server (Dunkles Design für beste Lesbarkeit im Cockpit)
+        // KORREKTUR: Vollständig freier, unblockierbarer OpenStreetMap Karten-Server
         map = new maplibre-gl.Map({
             container: 'map',
-            style: 'https://cartocdn.com', 
+            style: {
+                "version": 8,
+                "sources": {
+                    "osm-raster-tiles": {
+                        "type": "raster",
+                        "tiles": ["https://openstreetmap.org{z}/{x}/{y}.png"],
+                        "tileSize": 256
+                    }
+                },
+                "layers": [
+                    {
+                        "id": "osm-tiles",
+                        "type": "raster",
+                        "source": "osm-raster-tiles",
+                        "minzoom": 0,
+                        "maxzoom": 19
+                    }
+                ]
+            },
             center: [11.576, 48.137], 
             zoom: 10
         });
@@ -75,7 +93,6 @@
 
         navigator.geolocation.watchPosition((pos) => {
             fahrerPosition = [pos.coords.longitude, pos.coords.latitude];
-            
             if (map.getSource('bus-location')) {
                 map.getSource('bus-location').setData({ 'type': 'Feature', 'geometry': { 'type': 'Point', 'coordinates': fahrerPosition } });
             } else {
@@ -83,18 +100,21 @@
                 map.addLayer({ 'id': 'bus-location', 'type': 'circle', 'source': 'bus-location', 'paint': { 'circle-radius': 10, 'circle-color': '#007aff' } });
             }
             if(routenLinie) { pruefeRoutenAbweichung(fahrerPosition); }
-        }, (err) => console.log("Suche GPS..."), { enableHighAccuracy: true });
+        }, (err) => console.log("GPS am PC gesperrt."), { enableHighAccuracy: true });
     }
 
     function sucheUndNavigiere() {
         const adresse = document.getElementById('target-address').value;
         if(!adresse) return alert("Bitte Ziel eingeben!");
         
-        fetch(`https://komoot.io{encodeURIComponent(adresse)}&limit=1`)
+        // KORREKTUR: Nutzung des offiziellen, unblockierbaren OpenStreetMap Suchservers
+        fetch(`https://openstreetmap.org{encodeURIComponent(adresse)}&limit=1`)
         .then(res => res.json())
         .then(data => {
-            if(!data.features || data.features.length === 0) return alert("Adresse nicht gefunden!");
-            zielKoordinaten = data.features[0].geometry.coordinates;
+            if(!data || data.length === 0) return alert("Adresse nicht gefunden!");
+            
+            // KORREKTUR: Umwandlung der Serverdaten in Zahlen-Koordinaten
+            zielKoordinaten = [parseFloat(data[0].lon), parseFloat(data[0].lat)];
             berechneBusRoute();
         }).catch(err => alert("Fehler bei der Adresssuche: " + err));
     }
@@ -105,11 +125,9 @@
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
         if(!zielKoordinaten) return alert("Bitte ein Ziel eingeben!");
 
-        // Startpunkt (Bereich Ingolstadt/München), falls das Handy drinnen noch kein GPS hat
-        const standardStartpunkt = [11.5762, 48.1371]; 
-        const start = fahrerPosition ? fahrerPosition : standardStartpunkt;
+        const start = fahrerPosition ? fahrerPosition : [11.5762, 48.1371];
 
-        // Sicherer und freier OSRM-Routenserver von OpenStreetMap
+        // KORREKTUR: Nutzung des offiziellen OSRM-Dienstes von OpenStreetMap
         const url = `https://project-osrm.org{start[0]},${start[1]};${zielKoordinaten[0]},${zielKoordinaten[1]}?geometries=geojson`;
 
         fetch(url)
