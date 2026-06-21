@@ -3,10 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Internes Bus-Navi</title>
-    <!-- Einbindung der unblockierbaren Leaflet-Kartenbibliothek -->
-    <link rel="stylesheet" href="https://unpkg.com" />
-    <script src="https://unpkg.com"></script>
+    <title>Internes Bus-Navi (Google Maps)</title>
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background: #222; color: #fff; }
         #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
@@ -14,10 +11,10 @@
         #control-panel { padding: 15px; background: #333; box-shadow: 0 4px 6px rgba(0,0,0,0.3); position: relative; z-index: 10; }
         select, input, button { width: 100%; padding: 12px; margin-bottom: 8px; border-radius: 5px; border: none; font-size: 16px; box-sizing: border-box; }
         button { background: #00e676; color: black; font-weight: bold; cursor: pointer; }
-        #login-screen button { background: #007aff; color: white; width: auto; padding: 12px 40px; border-radius: 5px; border: none; font-size: 16px; font-weight: bold; }
+        #login-screen button { background: #007aff; color: white; width: auto; padding: 12px 40px; font-weight: bold; }
         #login-screen input { width: 280px; text-align: center; background: #333; color: white; border: 1px solid #555; padding: 12px; border-radius: 5px; font-size: 16px; }
-        #map { position: absolute; top: 180px; bottom: 0; width: 100%; z-index: 1; background: #333; }
-        #visual-alert { display: none; background: red; color: white; text-align: center; padding: 10px; font-weight: bold; font-size: 18px; position: fixed; bottom: 10px; left: 10px; right: 10px; z-index: 999; border-radius: 5px; cursor: pointer; }
+        #map-container { position: absolute; top: 180px; bottom: 0; width: 100%; background: #222; }
+        iframe { width: 100%; height: 100%; border: none; }
     </style>
 </head>
 <body>
@@ -31,7 +28,7 @@
     <button onclick="checkPassword()">Anmelden</button>
 </div>
 
-<!-- Hauptinhalt (Erst nach Login sichtbar) -->
+<!-- Hauptinhalt (Wird nach Passwort freigeschaltet) -->
 <div id="main-content">
     <div id="control-panel">
         <select id="bus-select">
@@ -40,121 +37,53 @@
             <option value="bus2" data-h="3.60" data-b="2.50" data-l="12.00" data-g="15">Bus 2 (Standard) - H: 3.6m</option>
         </select>
         <input type="text" id="target-address" placeholder="Zielort oder Adresse eingeben...">
-        <button onclick="sucheUndNavigiere()">Route optisch berechnen</button>
+        <button onclick="starteGoogleNavi()">Route in Google Maps öffnen</button>
     </div>
-    <div id="visual-alert" onclick="recalculateRoute()">⚠️ ROUTE VERLASSEN! Hier tippen zum Neu-Berechnen</div>
-    <div id="map"></div>
+    <div id="map-container">
+        <!-- Google Maps Vorschau-Fenster mit Live-Verkehr -->
+        <iframe id="google-map" src="https://google.com"></iframe>
+    </div>
 </div>
 
 <script>
     const MEIN_PASSWORT = "1928";
+    let fahrerPosition = null;
 
     function checkPassword() {
         const eingabe = document.getElementById('password-input').value;
         if(eingabe === MEIN_PASSWORT) {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-content').style.display = 'block';
-            initMap(); 
+            aktiviereStandort();
         } else {
             alert("Falsches Passwort!");
         }
     }
 
-    let map, fahrerPosition, zielKoordinaten, routenLinie, routeLayer, busMarker;
-
-    function initMap() {
-        // Initialisierung der freien OpenStreetMap-Karte (Standard-Mittelpunkt Bayern)
-        map = L.map('map').setView([48.137, 11.576], 10);
-
-        // Auslieferung der unblockierbaren Straßenkacheln aktivieren
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        // GPS-Verfolgung starten
+    function aktiviereStandort() {
+        // Standort per GPS abrufen für die Vorschau-Karte
         navigator.geolocation.watchPosition((pos) => {
-            fahrerPosition = [pos.coords.latitude, pos.coords.longitude];
-            
-            if (busMarker) {
-                busMarker.setLatLng(fahrerPosition);
-            } else {
-                busMarker = L.circleMarker(fahrerPosition, { radius: 10, color: '#007aff', fillColor: '#007aff', fillOpacity: 0.8 }).addTo(map);
-            }
-            if(routenLinie) { pruefeRoutenAbweichung(fahrerPosition); }
-        }, (err) => console.log("GPS wird gesucht..."), { enableHighAccuracy: true });
-
-        // Wichtig: Zwingt den Browser, die Kartengröße sofort an das Handydisplay anzupassen
-        setTimeout(() => { map.invalidateSize(); }, 400);
+            fahrerPosition = pos.coords.latitude + "," + pos.coords.longitude;
+            // Zeigt die Google Maps Karte direkt am aktuellen Bus-Standort inklusive Live-Stau (layer=t)
+            document.getElementById('google-map').src = `https://google.com{fahrerPosition}&t=&z=13&layer=t&ie=UTF8&iwloc=&output=embed`;
+        }, (err) => console.log("Hole GPS-Daten..."), { enableHighAccuracy: true });
     }
 
-    function sucheUndNavigiere() {
-        const adresse = document.getElementById('target-address').value;
-        if(!adresse) return alert("Bitte Ziel eingeben!");
-        
-        fetch(`https://openstreetmap.org{encodeURIComponent(adresse)}&limit=1`)
-        .then(res => res.json())
-        .then(data => {
-            if(!data || data.length === 0) return alert("Adresse nicht gefunden!");
-            
-            zielKoordinaten = [parseFloat(data.lat), parseFloat(data.lon)];
-            berechneBusRoute();
-        }).catch(err => alert("Fehler bei der Adresssuche: " + err));
-    }
-
-    function berechneBusRoute() {
+    function starteGoogleNavi() {
         const e = document.getElementById("bus-select");
         const selectedBus = e.options[e.selectedIndex];
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
-        if(!zielKoordinaten) return alert("Bitte ein Ziel eingeben!");
 
-        // Startpunkt bei schwachem GPS-Signal drinnen (Notfall-Zentrum)
-        const start = fahrerPosition ? fahrerPosition : [48.1371, 11.5762];
+        const adresse = document.getElementById('target-address').value;
+        if(!adresse) return alert("Bitte Ziel eingeben!");
 
-        // Datenübergabe an das offizielle Routing-System
-        const url = `https://project-osrm.org{start[1]},${start[0]};${zielKoordinaten[1]},${zielKoordinaten[0]}?geometries=geojson`;
+        const start = fahrerPosition ? fahrerPosition : "Ingolstadt";
 
-        fetch(url)
-        .then(res => res.json())
-        .then(data => {
-            if(!data.routes || data.routes.length === 0) return alert("Keine Route gefunden!");
-            
-            // Konvertierung der Server-Koordinaten in das richtige Kartenformat
-            const coordsOSRM = data.routes[0].geometry.coordinates;
-            routenLinie = coordsOSRM.map(coord => [coord[1], coord[0]]);
-
-            if (routeLayer) { map.removeLayer(routeLayer); }
-
-            // Zeichnet die berechnete Strecke als grüne Linie auf dem Smartphone
-            routeLayer = L.polyline(routenLinie, { color: '#00e676', weight: 6 }).addTo(map);
-            
-            // KORREKTUR: Fester, korrekter Zahlenwert (30) für das Padding eingetragen!
-            const bounds = L.latLngBounds([start, zielKoordinaten]);
-            map.fitBounds(bounds, { padding: [30, 30] });
-        }).catch(err => alert("Fehler beim Routenserver: " + err));
-    }
-
-    function pruefeRoutenAbweichung(pos) {
-        if(!routenLinie) return;
-        let nahGenug = false;
-        for(let i=0; i < routenLinie.length; i++) {
-            let dX = routenLinie[i][0] - pos[0];
-            let dY = routenLinie[i][1] - pos[1];
-            let distanz = Math.sqrt(dX*dX + dY*dY);
-            if(distanz < 0.001) { nahGenug = true; break; }
-        }
-        if(!nahGenug) {
-            if (routeLayer) routeLayer.setStyle({ color: '#ff1744' });
-            document.getElementById('visual-alert').style.display = 'block';
-        } else {
-            if (routeLayer) routeLayer.setStyle({ color: '#00e676' });
-            document.getElementById('visual-alert').style.display = 'none';
-        }
-    }
-
-    function recalculateRoute() {
-        document.getElementById('visual-alert').style.display = 'none';
-        if(zielKoordinaten) berechneBusRoute(); 
+        // Übergibt die Fahrtdaten direkt an die offizielle Google Maps App auf dem Handy.
+        // Garantiert Echtzeit-Staus, unblockierbare Suche und stabile Führung während der Fahrt!
+        const googleIntentUrl = `https://google.com{encodeURIComponent(start)}&destination=${encodeURIComponent(adresse)}&travelmode=driving`;
+        
+        window.open(googleIntentUrl, '_blank');
     }
 </script>
 </body>
