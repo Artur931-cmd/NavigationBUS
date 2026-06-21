@@ -4,22 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Internes Bus-Navi</title>
-    <!-- Nutzung der extrem stabilen, kombinierten Mapbox-Infrastruktur -->
-    <script src="https://mapbox.com"></script>
-    <link href="https://mapbox.com" rel="stylesheet" />
-    <script src="https://mapbox.com"></script>
-    <link href="https://mapbox.com" rel="stylesheet" />
+    <!-- MapLibre für unblockierbare, schlüssellose OpenStreetMap-Karten -->
+    <script src="https://unpkg.com"></script>
+    <link href="https://unpkg.com" rel="stylesheet" />
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background: #222; color: #fff; }
         #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
         #main-content { display: none; }
         #control-panel { padding: 15px; background: #333; box-shadow: 0 4px 6px rgba(0,0,0,0.3); position: relative; z-index: 10; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 8px; border-radius: 5px; border: none; font-size: 16px; box-sizing: border-box; }
+        select, input, button { width: 100%; padding: 12px; margin-bottom: 8px; border-radius: 5px; border: none; font-size: 16px; box-sizing: border-box; }
         button { background: #00e676; color: black; font-weight: bold; cursor: pointer; }
         #login-screen button { background: #007aff; color: white; width: auto; padding: 12px 40px; }
-        #login-screen input { width: 280px; padding: 12px; text-align: center; background: #333; color: white; border: 1px solid #555; border-radius: 5px; font-size: 16px; }
-        #map { position: absolute; top: 140px; bottom: 0; width: 100%; z-index: 1; }
-        .mapboxgl-ctrl-geocoder { width: 100% !important; max-width: none !important; margin-bottom: 8px; }
+        #login-screen input { width: 280px; text-align: center; background: #333; color: white; border: 1px solid #555; }
+        #map { position: absolute; top: 180px; bottom: 0; width: 100%; z-index: 1; }
         #visual-alert { display: none; background: red; color: white; text-align: center; padding: 10px; font-weight: bold; font-size: 18px; position: fixed; bottom: 10px; left: 10px; right: 10px; z-index: 999; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
@@ -42,7 +39,8 @@
             <option value="bus1" data-h="4.00" data-b="2.55" data-l="14.00" data-g="18">Bus 1 (Doppeldecker) - H: 4.0m</option>
             <option value="bus2" data-h="3.60" data-b="2.50" data-l="12.00" data-g="15">Bus 2 (Standard) - H: 3.6m</option>
         </select>
-        <div id="geocoder"></div>
+        <input type="text" id="target-address" placeholder="Zielort oder Adresse eingeben...">
+        <button onclick="sucheUndNavigiere()">Route optisch berechnen</button>
     </div>
     <div id="visual-alert" onclick="recalculateRoute()">⚠️ ROUTE VERLASSEN! Hier tippen zum Neu-Berechnen</div>
     <div id="map"></div>
@@ -50,8 +48,6 @@
 
 <script>
     const MEIN_PASSWORT = "1928";
-    // Offizieller, freigeschalteter Mapbox-Schlüssel (Verhindert Ladefehler im Browser)
-    const ACCESS_TOKEN = 'pk.eyJ1IjoibWFwYm94Ym90IiwiYSI6ImNsam10OXp3ZjA0YmUzZ3A3b2xtMzh0YXYifQ.E89gWAsaYbeE58H89-S_vA';
 
     function checkPassword() {
         const eingabe = document.getElementById('password-input').value;
@@ -64,33 +60,18 @@
         }
     }
 
-    let map, fahrerPosition, zielKoordinaten, routenLinie, geocoder;
+    let map, fahrerPosition, zielKoordinaten, routenLinie;
 
     function initMap() {
-        mapboxgl.accessToken = ACCESS_TOKEN;
-        
-        map = new mapboxgl.Map({
+        // Freier, unblockierbarer OpenStreetMap Karten-Server (Dunkles Design für beste Lesbarkeit im Cockpit)
+        map = new maplibre-gl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/dark-v11', 
+            style: 'https://cartocdn.com', 
             center: [11.576, 48.137], 
             zoom: 10
         });
 
-        // Integrierte Suchleiste initialisieren
-        geocoder = new MapboxGeocoder({
-            accessToken: mapboxgl.accessToken,
-            mapboxgl: mapboxgl,
-            placeholder: 'Zielort oder Adresse eingeben...',
-            marker: false
-        });
-
-        document.getElementById('geocoder').appendChild(geocoder.onAdd(map));
-
-        // Wenn ein Ziel ausgewählt wird, sofort Route berechnen
-        geocoder.on('result', (e) => {
-            zielKoordinaten = e.result.geometry.coordinates;
-            berechneBusRoute();
-        });
+        setTimeout(() => { map.resize(); }, 200);
 
         navigator.geolocation.watchPosition((pos) => {
             fahrerPosition = [pos.coords.longitude, pos.coords.latitude];
@@ -102,19 +83,34 @@
                 map.addLayer({ 'id': 'bus-location', 'type': 'circle', 'source': 'bus-location', 'paint': { 'circle-radius': 10, 'circle-color': '#007aff' } });
             }
             if(routenLinie) { pruefeRoutenAbweichung(fahrerPosition); }
-        }, (err) => console.log("GPS-Suche läuft..."), { enableHighAccuracy: true });
+        }, (err) => console.log("Suche GPS..."), { enableHighAccuracy: true });
+    }
+
+    function sucheUndNavigiere() {
+        const adresse = document.getElementById('target-address').value;
+        if(!adresse) return alert("Bitte Ziel eingeben!");
+        
+        fetch(`https://komoot.io{encodeURIComponent(adresse)}&limit=1`)
+        .then(res => res.json())
+        .then(data => {
+            if(!data.features || data.features.length === 0) return alert("Adresse nicht gefunden!");
+            zielKoordinaten = data.features[0].geometry.coordinates;
+            berechneBusRoute();
+        }).catch(err => alert("Fehler bei der Adresssuche: " + err));
     }
 
     function berechneBusRoute() {
         const e = document.getElementById("bus-select");
         const selectedBus = e.options[e.selectedIndex];
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
-        if(!zielKoordinaten) return alert("Bitte ein Ziel in die Suchleiste eingeben!");
+        if(!zielKoordinaten) return alert("Bitte ein Ziel eingeben!");
 
-        const start = fahrerPosition ? fahrerPosition : [11.5762, 48.1371];
-        
-        // Direkte Verbindung zum geschützten Mapbox-Routingsystem
-        const url = `https://mapbox.com{start[0]},${start[1]};${zielKoordinaten[0]},${zielKoordinaten[1]}?geometries=geojson&access_token=${ACCESS_TOKEN}`;
+        // Startpunkt (Bereich Ingolstadt/München), falls das Handy drinnen noch kein GPS hat
+        const standardStartpunkt = [11.5762, 48.1371]; 
+        const start = fahrerPosition ? fahrerPosition : standardStartpunkt;
+
+        // Sicherer und freier OSRM-Routenserver von OpenStreetMap
+        const url = `https://project-osrm.org{start[0]},${start[1]};${zielKoordinaten[0]},${zielKoordinaten[1]}?geometries=geojson`;
 
         fetch(url)
         .then(res => res.json())
@@ -137,9 +133,9 @@
                 });
             }
             
-            const bounds = new mapboxgl.LngLatBounds(start, zielKoordinaten);
+            const bounds = new maplibre-gl.LngLatBounds(start, zielKoordinaten);
             map.fitBounds(bounds, { padding: 50 });
-        }).catch(err => alert("Fehler: " + err));
+        }).catch(err => alert("Fehler beim Routenserver: " + err));
     }
 
     function pruefeRoutenAbweichung(pos) {
