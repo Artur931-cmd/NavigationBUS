@@ -28,7 +28,7 @@
     <button onclick="checkPassword()">Anmelden</button>
 </div>
 
-<!-- Hauptinhalt (Wird nach Passwort freigeschaltet) -->
+<!-- Hauptinhalt -->
 <div id="main-content">
     <div id="control-panel">
         <select id="bus-select">
@@ -49,6 +49,13 @@
     const MEIN_PASSWORT = "1928";
     let fahrerPosition = null;
 
+    // Funktion zum Verhindern, dass die Seite beim Drücken der Enter-Taste in der Adresszeile neu lädt
+    window.addEventListener('keydown', function(e) {
+        if(e.keyIdentifier=='U+000A'||e.keyIdentifier=='Enter'||e.keyCode==13) {
+            if(e.target.nodeName=='INPUT'&&e.target.type=='text') { e.preventDefault(); return false; }
+        }
+    }, true);
+
     function checkPassword() {
         const eingabe = document.getElementById('password-input').value;
         if(eingabe === MEIN_PASSWORT) {
@@ -61,10 +68,8 @@
     }
 
     function aktiviereStandort() {
-        // Standort per GPS abrufen für die Vorschau-Karte
         navigator.geolocation.watchPosition((pos) => {
             fahrerPosition = pos.coords.latitude + "," + pos.coords.longitude;
-            // Zeigt die Google Maps Karte direkt am aktuellen Bus-Standort inklusive Live-Stau (layer=t)
             document.getElementById('google-map').src = `https://google.com{fahrerPosition}&t=&z=13&layer=t&ie=UTF8&iwloc=&output=embed`;
         }, (err) => console.log("Hole GPS-Daten..."), { enableHighAccuracy: true });
     }
@@ -79,8 +84,7 @@
 
         const start = fahrerPosition ? fahrerPosition : "Ingolstadt";
 
-        // Übergibt die Fahrtdaten direkt an die offizielle Google Maps App auf dem Handy.
-        // Garantiert Echtzeit-Staus, unblockierbare Suche und stabile Führung während der Fahrt!
+        // Öffnet die offizielle Google Maps Navigation
         const googleIntentUrl = `https://google.com{encodeURIComponent(start)}&destination=${encodeURIComponent(adresse)}&travelmode=driving`;
         
         window.open(googleIntentUrl, '_blank');
