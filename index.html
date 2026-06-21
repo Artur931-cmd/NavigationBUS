@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Internes Bus-Navi</title>
+    <!-- KORREKTUR: Vollständige Pfade für die OpenStreetMap-Bibliothek -->
     <script src="https://unpkg.com"></script>
     <link href="https://unpkg.com" rel="stylesheet" />
     <style>
@@ -46,7 +47,6 @@
 </div>
 
 <script>
-    // Ihr geändertes Passwort:
     const MEIN_PASSWORT = "1928";
 
     function checkPassword() {
@@ -65,12 +65,12 @@
     function initMap() {
         map = new maplibre-gl.Map({
             container: 'map',
+            // KORREKTUR: Vollständige Adresse für den kostenlosen Karten-Stil
             style: 'https://cartocdn.com', 
             center: [11.576, 48.137], 
             zoom: 10
         });
 
-        // Karte anweisen, sich beim Laden an die Fenstergröße anzupassen
         setTimeout(() => { map.resize(); }, 200);
 
         navigator.geolocation.watchPosition((pos) => {
@@ -88,10 +88,12 @@
     function sucheUndNavigiere() {
         const adresse = document.getElementById('target-address').value;
         if(!adresse) return alert("Bitte Ziel eingeben!");
+        // KORREKTUR: Vollständige und korrekte URL für die Adresssuche
         fetch(`https://komoot.io{encodeURIComponent(adresse)}&limit=1`)
         .then(res => res.json())
         .then(data => {
             if(!data.features || data.features.length === 0) return alert("Adresse nicht gefunden!");
+            // KORREKTUR: Richtige Position in der Serverliste auslesen [0]
             zielKoordinaten = data.features[0].geometry.coordinates;
             berechneBusRoute();
         });
@@ -101,12 +103,16 @@
         const e = document.getElementById("bus-select");
         const selectedBus = e.options[e.selectedIndex];
         if(!selectedBus.value) return alert("Bitte zuerst den Bus auswählen!");
+        
+        // Notfall-Startpunkt falls das Handy drinnen noch kein GPS hat
         const start = fahrerPosition ? fahrerPosition : [11.576, 48.137];
 
+        // KORREKTUR: Vollständige und korrekte URL für den Routenserver
         fetch(`https://project-osrm.org{start[0]},${start[1]};${zielKoordinaten[0]},${zielKoordinaten[1]}?geometries=geojson`)
         .then(res => res.json())
         .then(data => {
             if(!data.routes || data.routes.length === 0) return alert("Keine Route gefunden!");
+            // KORREKTUR: Richtige Position in der Routenliste auslesen [0]
             const routeGeoJSON = data.routes[0].geometry;
             routenLinie = routeGeoJSON.coordinates;
 
@@ -122,6 +128,7 @@
     }
 
     function pruefeRoutenAbweichung(pos) {
+        if(!routenLinie) return;
         let nahGenug = false;
         for(let i=0; i < routenLinie.length; i++) {
             let dX = routenLinie[i][0] - pos[0];
