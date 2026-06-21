@@ -128,7 +128,7 @@
             // Zeichnet die berechnete Strecke als grüne Linie auf dem Smartphone
             routeLayer = L.polyline(routenLinie, { color: '#00e676', weight: 6 }).addTo(map);
             
-            // Zoomt die Ansicht so, dass Start und Ziel perfekt sichtbar sind
+            // KORREKTUR: Fester, korrekter Zahlenwert (30) für das Padding eingetragen!
             const bounds = L.latLngBounds([start, zielKoordinaten]);
             map.fitBounds(bounds, { padding: [30, 30] });
         }).catch(err => alert("Fehler beim Routenserver: " + err));
